@@ -1,0 +1,196 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "siteName": {
+            "defaultValue": "ncameo",
+            "type": "String"
+        },
+        "ADType":{
+            "defaultValue": "B2C",
+            "type": "String",
+            "allowedValues": [
+                "B2C",
+                "Azure AD"
+              ]
+        },
+        "TenantUrl":
+        {
+            "defaultValue": "TenantUrl",
+            "type": "String"
+        },
+        "AppId":{
+            "defaultValue": "Azure AD App Id",
+            "type": "String"
+        }
+
+    },
+    "variables": {
+        "storageAccountName": "[concat(parameters('siteName'), 'storage')]",
+        "serverFarmName": "[concat(parameters('siteName'), '-ServicePlan')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('storageAccountName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "accessTier": "Hot"
+            }
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2018-02-01",
+            "name": "[variables('serverFarmName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "B1",
+                "tier": "Basic",
+                "size": "B1",
+                "family": "B",
+                "capacity": 1
+            },
+            "kind": "linux",
+            "properties": {
+                "perSiteScaling": false,
+                "maximumElasticWorkerCount": 1,
+                "isSpot": false,
+                "freeOfferExpirationTime": "2020-05-20T18:23:11.4133333",
+                "reserved": true,
+                "isXenon": false,
+                "hyperV": false,
+                "targetWorkerCount": 0,
+                "targetWorkerSizeId": 0
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('storageAccountName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            ],
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                    "enabled": false
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/fileServices",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('storageAccountName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            ],
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "kind": "app",
+            "name": "[parameters('siteName')]",
+            "apiVersion": "2016-03-01",
+            "location": "[resourceGroup().location]",
+            "properties": {
+              "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('serverFarmName'))]",
+              "siteConfig": {
+                "appSettings": [                  
+                  {
+                    "name": "DOCKER_REGISTRY_SERVER_USERNAME",
+                    "value": "ncameo"
+                  },
+                  {
+                    "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
+                    "value": "Password@15"
+                  },
+                  {
+                    "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+                    "value": "false"
+                  },
+                  {
+                    "name": "NCameo_STORAGE_KEY",
+                    "value": "[listKeys(variables('storageAccountName'),'2017-10-01').keys[0].value]"
+                  },
+                  {
+                    "name": "NCameo_STORAGE_ACCOUNT",
+                    "value": "[variables('storageAccountName')]"
+                  },
+                  {
+                    "name": "NCameo_TenantId",
+                    "value": "[subscription().tenantId]"
+                  },                  
+                  {
+                    "name": "NCameo_ClinetId",
+                    "value": "[parameters('AppId')]"
+                  },
+                  {
+                    "name": "NCameo_ADType",
+                    "value": "[parameters('ADType')]"
+                  },
+                  {
+                    "name": "NCameo_TenantUrl",
+                    "value": "[parameters('TenantUrl')]"
+                  }
+                ],
+                "linuxFxVersion": "DOCKER|ncameo/workbench2.0:518"
+              }
+            },
+            "dependsOn": [
+              "[resourceId('Microsoft.Web/serverfarms', variables('serverFarmName'))]"
+            ]
+          },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('storageAccountName'), '/default/ncameo')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageAccountName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            ],
+            "properties": {
+                "publicAccess": "None"
+            }
+        }
+    ]
+}
